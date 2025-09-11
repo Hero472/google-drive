@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+////import { ConfigService } from '@nestjs/config';
+import * as bcrypt from 'bcrypt';
+import * as jwt from 'jsonwebtoken';
 
 interface Claims {
     sub: string;
@@ -11,11 +11,16 @@ interface Claims {
 @Injectable()
 export class AuthUtils {
 
-    constructor(private readonly configService: ConfigService) {}
+    constructor(
+        ////private readonly configService: ConfigService
+    ) {}
 
     async hashPassword(input: string): Promise<string> {
-        const saltRounds = this.configService.get<number>("SALT_ROUNDS", 12);
-        return await bcrypt.hash(input, saltRounds);
+        const saltRounds = parseInt(process.env.SALT_ROUNDS || '12', 12);
+        if (!saltRounds) {
+            console.log("No salt")
+        }
+        return await bcrypt.hash(input, 12);
     }
 
     async verifyPassword(password: string, hash: string): Promise<boolean> {
@@ -23,7 +28,7 @@ export class AuthUtils {
     }
 
     generateToken(email: string, minutes: number): string {
-        const secretKey = this.configService.get<string>('JWT_SECRET_KEY');
+        const secretKey = process.env.JWT_SECRET_KEY
         if (!secretKey) {
             throw new Error('JWT_SECRET_KEY not configured');
         }
@@ -39,7 +44,7 @@ export class AuthUtils {
     }
 
     verifyToken(token: string): boolean {
-        const secretKey = this.configService.get<string>('JWT_SECRET_KEY');
+        const secretKey = process.env.JWT_SECRET_KEY
         if (!secretKey) {
             throw new Error('JWT_SECRET_KEY not configured');
         }
@@ -53,7 +58,7 @@ export class AuthUtils {
     }
 
     isTokenExpired(token: string): boolean {
-        const secretKey = this.configService.get<string>('JWT_SECRET_KEY');
+        const secretKey = process.env.JWT_SECRET_KEY
         if (!secretKey) {
             throw new Error('JWT_SECRET_KEY not configured');
         }

@@ -48,16 +48,6 @@ export class ApiError extends HttpException {
     const details = error.message;
     return new ApiError(`${errorMessage}: ${details}`, 500, details);
   }
-
-  static serializationError(error: Error): ApiError {
-    const details = error.message;
-    return new ApiError('Invalid data format', 400, details);
-  }
-
-  static deserializationError(error: Error): ApiError {
-    const details = error.message;
-    return new ApiError('Invalid data format', 400, details);
-  }
 }
 
 export interface ApiErrorResponse {
@@ -89,12 +79,3 @@ export function errorResponse(apiError: ApiError): ApiResponse<never> {
     }
   }
 }
-
-export const createErrorResponses = {
-  conflict: (message: string): ApiError => new ApiError(message, 409),
-  badRequest: (message: string): ApiError => new ApiError(message, 400),
-  unauthorized: (message: string): ApiError => new ApiError(message, 401),
-  notFound: (message: string): ApiError => new ApiError(message, 404),
-  internalServerError: (message: string): ApiError => new ApiError(message, 500),
-  invalidData: (message: string): ApiError => new ApiError(message, 400),
-};

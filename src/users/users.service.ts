@@ -16,6 +16,7 @@ import { InjectModel } from "@nestjs/mongoose";
 import { AuthUtils } from "../utils/auth";
 import { EmailService } from "../email/email.service";
 import { randomBytes } from "crypto";
+import { VerifyEmailDto } from "./dto/verify-email.dto";
 
 @Injectable()
 export class UsersService {
@@ -53,17 +54,20 @@ export class UsersService {
 
       let userData = new User(createUserDto, hashedPassword, code);
 
+      console.log(userData);
+
       const createdUser = this.userModel.insertOne(userData);
 
       const userSend: UserSend = {
         _id: (await createdUser).id,
         username: createUserDto.username,
         email: createUserDto.email,
-        role: createUserDto.role || UserRole.USER,
+        role: UserRole.USER,
         access_token: undefined,
       };
       return userSend;
     } catch (e: unknown) {
+      console.log(e);
       if (e instanceof ApiError) {
         throw e;
       }
@@ -81,6 +85,10 @@ export class UsersService {
   async login(credentials: UserLoginReceive): Promise<UserSend> {
     try {
       let user = await this.findOneByEmail(credentials.email);
+
+      if (!user) {
+        throw ApiError.badRequest("Invalid email or password");
+      }
 
       const isPasswordValid = await this.authUtils.verifyPassword(
         credentials.password,
@@ -124,6 +132,7 @@ export class UsersService {
 
       return userSend;
     } catch (e: unknown) {
+      console.log("error: "+e)
       if (e instanceof ApiError) {
         throw e;
       }
@@ -136,16 +145,23 @@ export class UsersService {
     }
   }
 
-  async verifyEmail(verificationToken: string): Promise<void> {
-    const user = await this.userModel
-      .findOne({
-        verification_token: verificationToken,
-        verification_token_expires: { $gt: new Date() },
-      })
-      .exec();
+  async verifyEmail(verificationToken: VerifyEmailDto): Promise<void> {
+    const user = await this.findOneByEmail(verificationToken.email);
 
     if (!user) {
       throw ApiError.badRequest("Invalid or expired verification token");
+    } else {
+      if (user.verification_code != verificationToken.code) {
+        throw ApiError.badRequest("Invalid or expired verification token");
+      }
+
+      if (user.verification_code_expires <= new Date()) {
+        throw ApiError.badRequest("Invalid or expired verification token");
+      }
+    }
+
+    if (user.email_verified) {
+      throw ApiError.badRequest("User is already verified");
     }
 
     const result = await this.userModel
@@ -167,7 +183,7 @@ export class UsersService {
     }
   }
 
-  async findOneByEmail(email: string): Promise<User> {
+  async findOneByEmail(email: string): Promise<User | null> {
     try {
       const user = await this.userModel.findOne({ email: email }).exec();
 
@@ -178,15 +194,19 @@ export class UsersService {
           email: user.email,
           password: user.password,
           role: user.role,
+          access_token: user.access_token || null,
+          refresh_token: user.refresh_token || null,
+          is_active: user.is_active,
           email_verified: user.email_verified,
-          verification_code: undefined,
-          verification_code_expires: undefined,
-          password_reset_code: undefined,
-          password_reset_expires: undefined,
+          verification_code: user.verification_code || null,
+          verification_code_expires: user.verification_code_expires || null,
+          password_reset_code: user.password_reset_code || null,
+          password_reset_expires: user.password_reset_expires || null,
+          reset_password_token: user.reset_password_token || null,
+          reset_password_expires: user.reset_password_expires || null
         } as unknown as User;
-      } else {
-        throw ApiError.notFound("User not found");
       }
+      return null;
     } catch (e: unknown) {
       if (e instanceof ApiError) {
         throw e;
@@ -197,7 +217,7 @@ export class UsersService {
       }
 
       throw ApiError.internalServerError(
-        "Failed to create user due to unknown error"
+        "Failed to find user due to unknown error"
       );
     }
   }
@@ -527,7 +547,6 @@ export class UsersService {
       if (result.matchedCount === 0) {
         throw ApiError.notFound(`User not found`);
       }
-
     } catch (error: unknown) {
       if (error instanceof ApiError) {
         throw error;

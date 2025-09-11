@@ -2,8 +2,7 @@ import {
   Controller,
   Post,
   Body,
-  HttpCode,
-  HttpStatus,
+  InternalServerErrorException,
 } from "@nestjs/common";
 import { UsersService } from "./users.service";
 import { CreateUserDto } from "./dto/create-user.dto";
@@ -15,13 +14,13 @@ import {
 } from "src/utils/errors";
 import { UserLoginReceive, UserSend } from "./entities/user.entity";
 import { ObjectId } from "mongoose";
+import { VerifyEmailDto } from "./dto/verify-email.dto";
 
 @Controller("users")
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post("register")
-  @HttpCode(HttpStatus.CREATED)
   async create(
     @Body() createUserDto: CreateUserDto
   ): Promise<ApiResponse<UserSend>> {
@@ -29,15 +28,11 @@ export class UsersController {
       const user = await this.usersService.create(createUserDto);
       return successResponse<UserSend>(user);
     } catch (e: unknown) {
-      if (e instanceof ApiError) return errorResponse(e);
+      if (e instanceof ApiError) throw e;
 
-      return {
-        success: false,
-        error: {
-          error: "Internal Server Error",
-          code: 500,
-        },
-      };
+      throw new InternalServerErrorException(
+        errorResponse(new ApiError("Internal Server Error", 500))
+      );
     }
   }
 
@@ -49,35 +44,27 @@ export class UsersController {
       const user = await this.usersService.login(credentials);
       return successResponse<UserSend>(user);
     } catch (e: unknown) {
-      if (e instanceof ApiError) return errorResponse(e);
+      if (e instanceof ApiError) throw e;
 
-      return {
-        success: false,
-        error: {
-          error: "Internal Server Error",
-          code: 500,
-        },
-      };
+      throw new InternalServerErrorException(
+        errorResponse(new ApiError("Internal Server Error", 500))
+      );
     }
   }
 
   @Post("verify-email")
   async verifyEmail(
-    @Body() verificationToken: string
+    @Body() verificationToken: VerifyEmailDto
   ): Promise<ApiResponse<void>> {
     try {
       await this.usersService.verifyEmail(verificationToken);
       return successResponse<void>(undefined);
     } catch (e: unknown) {
-      if (e instanceof ApiError) return errorResponse(e);
+      if (e instanceof ApiError) throw e;
 
-      return {
-        success: false,
-        error: {
-          error: "Internal Server Error",
-          code: 500,
-        },
-      };
+      throw new InternalServerErrorException(
+        errorResponse(new ApiError("Internal Server Error", 500))
+      );
     }
   }
 
@@ -89,15 +76,11 @@ export class UsersController {
       await this.usersService.initiatePasswordChange(email);
       return successResponse<void>(undefined);
     } catch (e: unknown) {
-      if (e instanceof ApiError) return errorResponse(e);
+      if (e instanceof ApiError) throw e;
 
-      return {
-        success: false,
-        error: {
-          error: "Internal Server Error",
-          code: 500,
-        },
-      };
+      throw new InternalServerErrorException(
+        errorResponse(new ApiError("Internal Server Error", 500))
+      );
     }
   }
 

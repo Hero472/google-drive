@@ -19,6 +19,7 @@
     "noFallthroughCasesInSwitch": true,
     "strict": true,
     "noUnusedParameters": true,
-    "alwaysStrict": true
+    "alwaysStrict": true,
+    "noUnusedLocals": true
   }
 }
