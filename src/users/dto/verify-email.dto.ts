@@ -1,4 +1,3 @@
-// dto/verify-email.dto.ts
 import {IsEmail, IsString, Length } from 'class-validator';
 
 export class VerifyEmailDto {

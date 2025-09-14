@@ -17,6 +17,8 @@ import { AuthUtils } from "../utils/auth";
 import { EmailService } from "../email/email.service";
 import { randomBytes } from "crypto";
 import { VerifyEmailDto } from "./dto/verify-email.dto";
+import { VerifyPasswordChange, VerifyPasswordChangeReturn } from "./dto/verify-password-change.dto";
+import { CompletePasswordChange } from "./dto/complete-password-change.dto";
 
 @Injectable()
 export class UsersService {
@@ -259,7 +261,8 @@ export class UsersService {
     email: string
   ): Promise<{ resetToken: string; expiresAt: Date }> {
     try {
-      const user = await this.userModel.findOne({ email }).exec();
+      const user = await this.findOneByEmail(email)
+      console.log(user)
       if (!user) {
         // Don't reveal if email exists for security
         throw ApiError.notFound(
@@ -282,7 +285,7 @@ export class UsersService {
           {
             $set: {
               password_reset_code: verificationCode,
-              password_reset_code_expires: expiresAt,
+              password_reset_expires: expiresAt,
               reset_password_token: resetToken,
               reset_password_expires: expiresAt,
               updated_at: new Date(),
@@ -301,20 +304,26 @@ export class UsersService {
   }
 
   async verifyPasswordChangeCode(
-    resetToken: string,
-    verificationCode: string
-  ): Promise<{ isValid: boolean; message: string }> {
+    tokens: VerifyPasswordChange
+  ): Promise<VerifyPasswordChangeReturn> {
     try {
-      const user = await this.userModel
-        .findOne({
-          reset_password_token: resetToken,
-          reset_password_expires: { $gt: new Date() },
-          password_reset_code: verificationCode,
-          password_reset_code_expires: { $gt: new Date() },
-        })
-        .exec();
+      const user = await this.findOneByEmail(tokens.email)
 
       if (!user) {
+        return {
+          isValid: false,
+          message: "Invalid or expired verification code",
+        };
+      }
+
+      if (user.reset_password_token != tokens.resetToken) {
+        return {
+          isValid: false,
+          message: "Invalid or expired verification code",
+        };
+      }
+
+      if (user.password_reset_code != tokens.code) {
         return {
           isValid: false,
           message: "Invalid or expired verification code",
@@ -329,8 +338,8 @@ export class UsersService {
             $set: {
               reset_password_expires: new Date(Date.now() + 5 * 60 * 1000), // Extend 5 more minutes
               updated_at: new Date(),
+              password_reset_code: null
             },
-            $unset: { password_reset_code: 1 }, // Remove code after successful verification
           }
         )
         .exec();
@@ -347,26 +356,24 @@ export class UsersService {
   }
 
   async completePasswordChange(
-    resetToken: string,
-    newPassword: string
+    tokens: CompletePasswordChange
   ): Promise<void> {
     try {
-      const user = await this.userModel
-        .findOne({
-          reset_password_token: resetToken,
-          reset_password_expires: { $gt: new Date() },
-        })
-        .exec();
+      const user = await this.findOneByEmail(tokens.email);
 
       if (!user) {
         throw ApiError.badRequest("Invalid or expired reset token");
       }
 
+      if (user.reset_password_token != tokens.resetToken) {
+        throw ApiError.badRequest("Invalid or expired reset token");
+      }
+
       // Validate new password strength
-      this.validator.validatePasswordStrength(newPassword);
+      this.validator.validatePasswordStrength(tokens.newPassword);
 
       // Hash new password
-      const hashedPassword = await this.authUtils.hashPassword(newPassword);
+      const hashedPassword = await this.authUtils.hashPassword(tokens.newPassword);
 
       // Update password and clear all reset data
       const result = await this.userModel
@@ -376,14 +383,12 @@ export class UsersService {
             $set: {
               password: hashedPassword,
               updated_at: new Date(),
-            },
-            $unset: {
-              reset_password_token: 1,
-              reset_password_expires: 1,
-              password_reset_code: 1,
-              password_reset_code_expires: 1,
-              access_token: 1, // Invalidate existing sessions
-              refresh_token: 1,
+              reset_password_token: null,
+              reset_password_expires: null,
+              password_reset_code: null,
+              password_reset_code_expires: null,
+              access_token: null,
+              refresh_token: null,
             },
           }
         )
@@ -393,54 +398,11 @@ export class UsersService {
         throw ApiError.notFound("User not found during password update");
       }
     } catch (e: unknown) {
+      console.log(e)
       if (e instanceof ApiError) {
         throw e;
       }
       throw ApiError.internalServerError("Failed to complete password change");
-    }
-  }
-
-  async resendPasswordChangeCode(
-    resetToken: string
-  ): Promise<{ newCode: string; expiresAt: Date }> {
-    try {
-      const user = await this.userModel
-        .findOne({
-          reset_password_token: resetToken,
-          reset_password_expires: { $gt: new Date() },
-        })
-        .exec();
-
-      if (!user) {
-        throw ApiError.badRequest("Invalid or expired reset token");
-      }
-
-      // Generate new 6-digit code
-      const newCode = await this.emailService.sendPasswordResetEmail(
-        user.email
-      );
-      const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-
-      // Update with new code
-      await this.userModel
-        .updateOne(
-          { _id: user._id },
-          {
-            $set: {
-              password_reset_code: newCode,
-              password_reset_code_expires: expiresAt,
-              updated_at: new Date(),
-            },
-          }
-        )
-        .exec();
-
-      return { newCode, expiresAt };
-    } catch (error: unknown) {
-      if (error instanceof ApiError) {
-        throw error;
-      }
-      throw ApiError.internalServerError("Failed to resend verification code");
     }
   }
 

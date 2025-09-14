@@ -15,6 +15,9 @@ import {
 import { UserLoginReceive, UserSend } from "./entities/user.entity";
 import { ObjectId } from "mongoose";
 import { VerifyEmailDto } from "./dto/verify-email.dto";
+import { InitiatePasswordChange } from "./dto/initiate-password-change.dto";
+import { VerifyPasswordChange, VerifyPasswordChangeReturn } from "./dto/verify-password-change.dto";
+import { CompletePasswordChange } from "./dto/complete-password-change.dto";
 
 @Controller("users")
 export class UsersController {
@@ -70,11 +73,11 @@ export class UsersController {
 
   @Post("initiate-password-change")
   async initiatePasswordChange(
-    @Body() email: string
-  ): Promise<ApiResponse<void>> {
+    @Body() credentials: InitiatePasswordChange
+  ): Promise<ApiResponse<{ resetToken: string; expiresAt: Date }>> {
     try {
-      await this.usersService.initiatePasswordChange(email);
-      return successResponse<void>(undefined);
+      const codes = await this.usersService.initiatePasswordChange(credentials.email);
+      return successResponse<{ resetToken: string; expiresAt: Date }>(codes);
     } catch (e: unknown) {
       if (e instanceof ApiError) throw e;
 
@@ -86,61 +89,33 @@ export class UsersController {
 
   @Post("verify-password-change")
   async verifyPasswordChange(
-    @Body() tokens: {resetToken: string, verificationCode: string}
-  ): Promise<ApiResponse<{ isValid: boolean; message: string }>> {
+    @Body() tokens: VerifyPasswordChange
+  ): Promise<ApiResponse<VerifyPasswordChangeReturn>> {
     try {
-      const result = await this.usersService.verifyPasswordChangeCode(tokens.resetToken, tokens.verificationCode);
-      return successResponse<{ isValid: boolean; message: string }>({isValid: result.isValid, message: result.message});
+      const result = await this.usersService.verifyPasswordChangeCode(tokens);
+      return successResponse<VerifyPasswordChangeReturn>(result);
     } catch (e: unknown) {
-      if (e instanceof ApiError) return errorResponse(e);
+      if (e instanceof ApiError) throw e;
 
-      return {
-        success: false,
-        error: {
-          error: "Internal Server Error",
-          code: 500,
-        },
-      };
+      throw new InternalServerErrorException(
+        errorResponse(new ApiError("Internal Server Error", 500))
+      );
     }
   }
 
   @Post("complete-password-change")
   async completePasswordChange(
-    @Body() tokens: {resetToken: string, newPassword: string}
+    @Body() tokens: CompletePasswordChange
   ): Promise<ApiResponse<void>> {
     try {
-      await this.usersService.completePasswordChange(tokens.resetToken, tokens.newPassword);
+      await this.usersService.completePasswordChange(tokens);
       return successResponse<void>(undefined);
     } catch (e: unknown) {
-      if (e instanceof ApiError) return errorResponse(e);
+      if (e instanceof ApiError) throw e;
 
-      return {
-        success: false,
-        error: {
-          error: "Internal Server Error",
-          code: 500,
-        },
-      };
-    }
-  }
-
-  @Post("resend-password-change")
-  async resendPasswordChangeCode(
-    @Body() resetToken: string
-  ): Promise<ApiResponse<{ newCode: string; expiresAt: Date }>> {
-    try {
-      const result = await this.usersService.resendPasswordChangeCode(resetToken);
-      return successResponse<{ newCode: string; expiresAt: Date }>({newCode: result.newCode, expiresAt: result.expiresAt});
-    } catch (e: unknown) {
-      if (e instanceof ApiError) return errorResponse(e);
-
-      return {
-        success: false,
-        error: {
-          error: "Internal Server Error",
-          code: 500,
-        },
-      };
+      throw new InternalServerErrorException(
+        errorResponse(new ApiError("Internal Server Error", 500))
+      );
     }
   }
 
